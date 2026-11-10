@@ -18,7 +18,8 @@ import json
 import requests
 import missing_details
 
-APP_DIR = "/system/apps/bjorn"
+APP_DIRS = ("/remote/apps/bjorn", "/system/apps/bjorn", "/apps/bjorn", "/bjorn")
+APP_DIR = next(path for path in APP_DIRS if is_dir(path))
 os.chdir(APP_DIR)
 sys.path.insert(0, APP_DIR)
 
@@ -27,6 +28,8 @@ import config
 MISSING = missing_details.missing("WIFI_SSID")
 if not MISSING:
     import wifi
+
+badge.mode(LORES | VSYNC)
 
 WIDTH, HEIGHT = 160, 120
 
@@ -92,24 +95,27 @@ def fetch_netkb():
     try:
         url = "%s/netkb_data_json" % config.BJORN_HOST
         data = fetch_json(url)
-        netkb_data = data
-        last_error = None
-        last_status = "connected"
-        fetched_at = badge.ticks
+        if isinstance(data, dict):
+            netkb_data = data
+            last_error = None
+            last_status = "connected"
+            fetched_at = badge.ticks
+        else:
+            raise ValueError("Invalid response format")
     except Exception as e:
         last_error = "%s: %s" % (type(e).__name__, str(e)[:30])
         last_status = "fetch failed"
 
 
 def fetch_web_delay():
-    """Get recommended poll interval from Bjorn."""
+    """Get recommended poll interval from Bjorn (web UI refresh rate)."""
     global poll_delay
     try:
         url = "%s/get_web_delay" % config.BJORN_HOST
         data = fetch_json(url)
-        if isinstance(data, dict) and "delay" in data:
-            delay = int(data.get("delay", 30))
-            poll_delay = max(10, min(300, delay))
+        if isinstance(data, dict) and "web_delay" in data:
+            web_delay = int(data.get("web_delay", 30))
+            poll_delay = max(30, web_delay)
     except Exception:
         pass
 
@@ -142,25 +148,35 @@ def toggle_orchestrator():
 
 
 def extract_host_list():
-    """Extract host information from netkb_data."""
-    if not netkb_data or not isinstance(netkb_data, list):
+    """Extract host information from netkb_data.
+    
+    Expected format: {"ips": [...], "ports": {ip: [port_strings]}, "actions": [...]}
+    """
+    if not netkb_data or not isinstance(netkb_data, dict):
+        return []
+    
+    ips = netkb_data.get("ips", [])
+    ports_dict = netkb_data.get("ports", {})
+    
+    if not isinstance(ips, list) or not isinstance(ports_dict, dict):
         return []
     
     hosts = []
-    for entry in netkb_data:
-        if not isinstance(entry, dict):
+    for ip in ips[:50]:
+        if not ip or not isinstance(ip, str):
             continue
         
-        ip = entry.get("ip", "")
-        ports = entry.get("ports", [])
-        
-        if ip and ip != "IP":
-            port_str = ",".join(str(p) for p in ports[:5]) if ports else "no ports"
+        ports = ports_dict.get(ip, [])
+        if isinstance(ports, list) and ports:
+            port_str = ",".join(str(p) for p in ports[:5])
             if len(ports) > 5:
                 port_str += "..."
-            hosts.append((ip, port_str))
+        else:
+            port_str = "no ports"
+        
+        hosts.append((ip, port_str))
     
-    return hosts[:50]
+    return hosts
 
 
 def draw_title():

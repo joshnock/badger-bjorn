@@ -60,20 +60,45 @@ APP_ORDER = (
 ## Safety
 
 This app only uses safe read-only endpoints:
-- `GET /netkb_data_json` - Network scan results
-- `GET /get_web_delay` - Recommended poll interval
+- `GET /netkb_data_json` - Network scan results (returns `{"ips": [...], "ports": {...}}`)
+- `GET /get_web_delay` - Web UI refresh delay (returns `{"web_delay": <seconds>}`)
 - `POST /start_orchestrator` - Start scanning
 - `POST /stop_orchestrator` - Stop scanning
 
 No offensive operations, credential viewing, or attack execution endpoints are called.
 
+**Note**: The `web_delay` from Bjorn is the web UI refresh rate (typically ~2 seconds), not the scan cadence. The badge clamps the poll interval to a minimum of 30 seconds to avoid excessive requests.
+
 ## Technical Details
 
-- Polls Bjorn every 30 seconds (configurable via `/get_web_delay`)
+- Polls Bjorn every 30 seconds (minimum, respects `web_delay` if larger)
 - Retries failed requests after 15 seconds
 - Shows up to 50 hosts with 5 ports each (truncated for display)
 - Request timeout: 8 seconds
 - Non-blocking network operations
+- Resilient app directory resolution (works in multiple mount paths)
+- Uses LORES mode (160x120) for efficient display
+
+### API Response Formats (Verified from Bjorn Source)
+
+**`/netkb_data_json`** (from `infinition/Bjorn/utils.py`):
+```json
+{
+  "ips": ["192.168.1.100", "192.168.1.101"],
+  "ports": {
+    "192.168.1.100": ["22", "80", "443"],
+    "192.168.1.101": ["3306"]
+  },
+  "actions": ["scan_action", ...]
+}
+```
+Ports are returned as strings (split from semicolon-separated CSV data).
+
+**`/get_web_delay`** (from `infinition/Bjorn/webapp.py`):
+```json
+{"web_delay": 2}
+```
+This is the web UI refresh rate, typically 2 seconds. The badge uses `max(30, web_delay)` to avoid polling too frequently.
 
 ## Troubleshooting
 
