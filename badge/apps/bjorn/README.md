@@ -1,14 +1,10 @@
 # Bjorn
 
-Monitor Bjorn security scanner status and view alive hosts on your LAN.
+Monitor Bjorn security scanner status with a colorized Viking-themed e-paper layout.
 
 ## Description
 
-Connects to a Bjorn instance (https://github.com/infinition/Bjorn) running on your local network and displays:
-- Number of alive hosts detected
-- Orchestrator running/stopped status
-- List of discovered hosts with open ports
-- Connection status and errors
+Connects to a Bjorn instance (https://github.com/infinition/Bjorn) running on your local network and displays scan status with a pixel-art Viking interface featuring Bjorn the badger in his horned helmet, real-time stats, and atmospheric commentary.
 
 ## Requirements
 
@@ -27,17 +23,44 @@ BJORN_HOST = "http://192.168.1.100:8000"  # Your Bjorn IP and port
 
 ### Controls
 
-- **Up/Down**: Scroll through the host list
-- **Select**: Toggle Bjorn orchestrator (start/stop)
+- **Select**: Toggle Bjorn orchestrator (start/stop scanning)
 - **Back**: Exit to menu
 
-### Display
+### Display Layout
 
-The app shows three sections:
+The app uses a 160×120 colorized e-paper style layout inspired by Bjorn's original Waveshare e-paper screen:
 
-1. **Title bar**: "Bjorn" title and alive host count
-2. **Status line**: Orchestrator state (running/stopped) and connection status
-3. **Host list**: Scrollable list of discovered IPs with their open ports
+1. **Top bar**: Wi-Fi status, "BJORN" title, and connection indicator
+2. **Stats strip**: Four stats with icons
+   - Targets (alive hosts)
+   - Ports (unique open ports)
+   - Vulns (placeholder - shows "--" until endpoint available)
+   - Creds (placeholder - shows "--" until endpoint available)
+3. **Left panel**: Animated 52×52 Bjorn sprite that changes based on state
+   - **Idle**: Eyes open, resting
+   - **Happy**: Eyes closed, smiling (also used when stopped)
+   - **Cheeky**: Occasional tongue-out variant
+   - **Scanning**: Glasses on, alternating horn positions
+   - **Offline**: Greyed out when Wi-Fi is down or Bjorn is unreachable
+4. **Right panel**: Status with color-coded title
+   - **SCANNING** (amber): orchestrator is running
+   - **IDLE** (green): connected but not scanning
+   - **OFFLINE** (red): no Wi-Fi or Bjorn unreachable
+   - Current action name (e.g., "NetworkScanner")
+   - Subnet being scanned
+   - RUN/STOP chip showing current state
+   - Hint text for Select button
+5. **Frise divider**: Viking knot pattern
+6. **Comment lines**: Bjorn's atmospheric status messages
+
+### Color Palette
+
+The app uses a 12-color parchment-paper palette with plum-black ink and spot colors:
+- Parchment paper background
+- Green = good/running
+- Amber = busy/scanning
+- Red = errors/stopped
+- Teal = Wi-Fi and credentials
 
 ### Installation
 
@@ -73,13 +96,54 @@ No offensive operations, credential viewing, or attack execution endpoints are c
 
 - Polls Bjorn every 30 seconds (minimum, respects `web_delay` if larger)
 - Retries failed requests after 15 seconds
-- Shows up to 50 hosts with 5 ports each (truncated for display)
 - Request timeout: 8 seconds
 - Non-blocking network operations
-- Resilient app directory resolution (works in multiple mount paths)
-- Uses LORES mode (160x120) for efficient display
+- Integer-only vec2 coordinates for pixel-perfect rendering
+- Uses LORES mode (160×120) with exact palette colors
+- Sprite animation: frames swap every 2-4 seconds randomly
+- Font: `font.smart` for numbers and titles, `font.sins` for body text
 
-### API Response Formats (Verified from Bjorn Source)
+### Font Baseline Notes
+
+The layout assumes these font metrics from the `.ppf` files:
+- `font.smart`: cap top is 4 rows below text y
+- `font.sins`: cap top is 3 rows below text y
+- Space width: 3px
+
+**These offsets may need device verification.** If text appears misaligned by 1px, adjust `SMART_OFFSET` and `SINS_OFFSET` in `__init__.py`.
+
+### Asset Structure
+
+```
+badge/apps/bjorn/
+├── __init__.py           # Main app code
+├── config.py             # BJORN_HOST configuration
+├── icon.png              # 48×48 menu icon (Bjorn's head)
+├── README.md             # This file
+└── assets/
+    ├── sprites/
+    │   ├── bjorn_idle_52.png      # Eyes open
+    │   ├── bjorn_happy_52.png     # Eyes closed, smiling
+    │   ├── bjorn_cheeky_52.png    # Tongue out
+    │   ├── bjorn_scan_52.png      # Scanning with glasses
+    │   ├── bjorn_scan2_52.png     # Scanning, second frame
+    │   ├── bjorn_offline_52.png   # Greyed out
+    │   └── bjorn_strip_52.png     # All 6 frames in one sheet
+    ├── icons/
+    │   ├── icon_wifi_14.png
+    │   ├── icon_wifi_off_14.png
+    │   ├── icon_connected_14.png
+    │   ├── icon_disconnected_14.png
+    │   ├── icon_target_14.png
+    │   ├── icon_port_14.png
+    │   ├── icon_vuln_14.png
+    │   └── icon_cred_14.png
+    └── ui/
+        ├── title_bjorn_53x10.png  # "BJORN" wordmark
+        └── frise_153x9.png        # Viking knot divider
+```
+
+### API Response Formats
 
 **`/netkb_data_json`** (from `infinition/Bjorn/utils.py`):
 ```json
@@ -92,13 +156,11 @@ No offensive operations, credential viewing, or attack execution endpoints are c
   "actions": ["scan_action", ...]
 }
 ```
-Ports are returned as strings (split from semicolon-separated CSV data).
 
 **`/get_web_delay`** (from `infinition/Bjorn/webapp.py`):
 ```json
 {"web_delay": 2}
 ```
-This is the web UI refresh rate, typically 2 seconds. The badge uses `max(30, web_delay)` to avoid polling too frequently.
 
 ## Troubleshooting
 
@@ -106,18 +168,21 @@ This is the web UI refresh rate, typically 2 seconds. The badge uses `max(30, we
 - Verify Wi-Fi credentials in Settings
 - Check that your badge can reach your network
 
-**"fetch failed" error**:
+**"fetch failed" / Bjorn unreachable**:
 - Verify BJORN_HOST in config.py matches your Bjorn instance
 - Check that Bjorn is running and accessible
 - Ensure your badge and Bjorn are on the same network
 
-**"no hosts found"**:
-- Bjorn may not have scanned yet
-- Toggle the orchestrator with Select to start scanning
-- Wait for Bjorn to complete a scan cycle
+**Bjorn shows OFFLINE state**:
+- Sprite is greyed out when Wi-Fi is down or Bjorn cannot be reached
+- Check connection status icon in top right (red X = disconnected)
 
-## Notes
+**Stats show "--"**:
+- Vulns and creds stats show "--" as placeholders until additional Bjorn endpoints are available
+- Targets and ports should populate once Bjorn completes a scan
 
-- The icon is a placeholder. Contributions welcome!
-- Display works best with low to moderate numbers of hosts (< 50)
-- Very large port lists are truncated to save space
+## Art Credits
+
+Colorized e-paper art pack derived from Bjorn's original Waveshare e-paper status screen. Sprites adapted from Bjorn's `resources/images/status/` frames. All art follows a 12-color parchment palette with exact RGB values for pixel-perfect rendering.
+
+Layout coordinates and palette constants are documented in the art pack's `README.md`, `STYLE_GUIDE.md`, and `AUDIT.md` (0 off-palette pixels).
